@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "998420533995",
+    "firebase_url": "https://rumblr-935e1.firebaseio.com",
+    "project_id": "rumblr-935e1",
+    "storage_bucket": "rumblr-935e1.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:998420533995:android:8409146387c44d433764ae",
+        "android_client_info": {
+          "package_name": "com.example.rumblr"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "998420533995-aqgs92k1aun0limajln1es1b18336amr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.rumblr",
+            "certificate_hash": "ae7596ecf3ad153e62d3bcd988e6d08cc82ff498"
+          }
+        },
+        {
+          "client_id": "998420533995-c1qhdq0gmgg2al5l2bmpnl3h3qupc4gq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAulpgdmTDBjQICy0r8SGHYl1Z6zzw7zJ8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "998420533995-c1qhdq0gmgg2al5l2bmpnl3h3qupc4gq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
