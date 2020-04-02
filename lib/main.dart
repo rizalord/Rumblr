@@ -1,5 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:rumblr/components/text_quote.dart';
+import 'package:rumblr/pages/home.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import './components/logo_app.dart';
 import './components/sign_in_btn.dart';
 
@@ -28,10 +31,22 @@ class _AuthenticationState extends State<Authentication> {
 
   @override
   void initState() {
-    Future.delayed(Duration(seconds: 3), () {
-      setState(() {
-        _showQuoteAndButton = true;
-      });
+    Future.delayed(Duration(seconds: 3), () async {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      if (prefs.getString('uid') != null) {
+        if (prefs.getString('photo') != null) {
+          Navigator.pushReplacement(
+              context, MaterialPageRoute(builder: (context) => Home()));
+        } else {
+          setState(() {
+            _showQuoteAndButton = true;
+          });   
+        }
+      } else {
+        setState(() {
+          _showQuoteAndButton = true;
+        });
+      }
     });
 
     super.initState();

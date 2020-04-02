@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:rumblr/components/chat_room_header.dart';
+import 'package:rumblr/pages/scheduled_fight.dart';
 import 'package:touchable_opacity/touchable_opacity.dart';
 
 class ChatRoom extends StatefulWidget {
@@ -451,39 +452,48 @@ class TwoButtons extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          Container(
-            width: MediaQuery.of(context).size.width / 2.2,
-            height: 40,
-            margin: EdgeInsets.only(right: 7.5),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-                border:
-                    Border.all(color: Colors.white.withOpacity(0.9), width: 2),
-                borderRadius: BorderRadius.circular(5)),
-            child: Text(
-              'SCHEDULE FIGHT',
-              style: GoogleFonts.roboto(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                  fontStyle: FontStyle.italic),
+          TouchableOpacity(
+            activeOpacity: 0.7,
+            onTap: (){
+              Navigator.push(context, MaterialPageRoute(builder: (context) => ScheduledFight()));
+            },
+            child: Container(
+              width: MediaQuery.of(context).size.width / 2.2,
+              height: 40,
+              margin: EdgeInsets.only(right: 7.5),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.9), width: 2),
+                  borderRadius: BorderRadius.circular(5)),
+              child: Text(
+                'SCHEDULE FIGHT',
+                style: GoogleFonts.roboto(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    fontStyle: FontStyle.italic),
+              ),
             ),
           ),
-          Container(
-            width: MediaQuery.of(context).size.width / 2.2,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-                border:
-                    Border.all(color: Colors.white.withOpacity(0.9), width: 2),
-                borderRadius: BorderRadius.circular(5)),
-            child: Text(
-              'PUSSY OUT',
-              style: GoogleFonts.roboto(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                  fontStyle: FontStyle.italic),
+          TouchableOpacity(
+            activeOpacity: 0.7,
+            child: Container(
+              width: MediaQuery.of(context).size.width / 2.2,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.9), width: 2),
+                  borderRadius: BorderRadius.circular(5)),
+              child: Text(
+                'PUSSY OUT',
+                style: GoogleFonts.roboto(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    fontStyle: FontStyle.italic),
+              ),
             ),
           ),
         ],

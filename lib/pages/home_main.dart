@@ -1,6 +1,9 @@
+import 'dart:ffi';
 import 'dart:ui';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:icon_shadow/icon_shadow.dart';
 import 'package:rumblr/components/cards/detail_card.dart';
@@ -16,34 +19,55 @@ class HomeMain extends StatefulWidget {
 }
 
 class HomeMainState extends State<HomeMain> {
-  var _listData = [
-    {
-      "uri":
-          'https://i.pinimg.com/originals/54/13/34/541334f83463f82e29bc59300de0fe27.jpg',
-      "name": 'mattyice67',
-      "stars": 2,
-      "visible": true
-    },
-    {
-      "uri":
-          'https://pbs.twimg.com/profile_images/1079976263157248000/HFfW_o61_400x400.jpg',
-      "name": 'omarin712',
-      "stars": 3,
-      "visible": true
-    },
-    {
-      "uri":
-          'https://m.ayobandung.com/images-bandung/post/articles/2018/11/09/40331/cecep.jpg',
-      "name": 'cecepgans45',
-      "stars": 4,
-      "visible": true
-    },
-  ];
-
+  var _listData = [];
   bool showFight = false;
   double showFightOpacity = 0.0;
 
-  void _passOpponent() {
+  @override
+  void initState() {
+    _getOpponents();
+    super.initState();
+  }
+
+  void _getOpponents() async {
+    var myPos = await Geolocator()
+        .getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    // Get Nearest Opponent
+    _getNearestLocation(myPos.latitude, myPos.longitude, 1);
+  }
+
+  void _getNearestLocation(latitude, longitude, distance) {
+    // ~1 mile of lat and lon in degrees
+    var lat = 0.0144927536231884;
+    var lon = 0.0181818181818182;
+
+    var lowerLat = latitude - (lat * distance);
+    var lowerLon = longitude - (lon * distance);
+
+    var greaterLat = latitude + (lat * distance);
+    var greaterLon = longitude + (lon * distance);
+
+    var lesserGeopoint = GeoPoint(lowerLat, lowerLon);
+    var greaterGeopoint = GeoPoint(greaterLat, greaterLon);
+
+    setState(() {
+      Firestore.instance
+          .collection("users")
+          .where('geo',
+              isGreaterThanOrEqualTo: lesserGeopoint,
+              isLessThanOrEqualTo: greaterGeopoint)
+          .limit(3)
+          .snapshots()
+          .listen((QuerySnapshot event) {
+        event.documents.forEach((DocumentSnapshot element) {
+          _listData.add(element);
+        });
+      });
+    });
+  }
+
+  void _passOpponent() async {
+
     setState(() {
       var tmp = _listData.first;
       _listData.removeAt(0);
@@ -80,9 +104,16 @@ class HomeMainState extends State<HomeMain> {
                             left: 8 * (_listData.indexOf(item) + 1).toDouble(),
                             right: 8 * (_listData.indexOf(item) + 1).toDouble(),
                             child: DetailCard(
-                                name: item['name'],
-                                stars: item['stars'],
-                                uri: item['uri']),
+                                name: item['username'],
+                                stars: item['totalFights'] / 5 == 0
+                                    ? 1
+                                    : (item['totalFights'].toDouble() / 5)
+                                                .floor() >
+                                            5
+                                        ? 5
+                                        : (item['totalFights'].toDouble() / 5)
+                                            .floor(),
+                                uri: item['photo']),
                           ))
                       .toList()
                       .reversed
@@ -263,12 +294,11 @@ class TextForBattle extends StatelessWidget {
         child: Text(
           'You and mattyice67 both want to throw down. Start chatting to arrange a time and location, then broadcast the final fight details to draw a crowd.',
           style: GoogleFonts.roboto(
-            color: Colors.white,
-            fontStyle: FontStyle.italic,
-            fontWeight: FontWeight.w500,
-            fontSize: 17,
-            height: 1.5
-          ),
+              color: Colors.white,
+              fontStyle: FontStyle.italic,
+              fontWeight: FontWeight.w500,
+              fontSize: 17,
+              height: 1.5),
           textAlign: TextAlign.center,
         ),
       ),

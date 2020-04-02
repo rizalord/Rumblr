@@ -77,7 +77,10 @@ class ChatRoomHeader extends StatelessWidget {
           ),
           TouchableOpacity(
             activeOpacity: 0.7,
-            onTap: callBack,
+            onTap: () {
+              FocusScope.of(context).unfocus();
+              callBack();
+            },
             child: Container(
               width: 65,
               height: 65,

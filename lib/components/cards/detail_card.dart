@@ -5,8 +5,7 @@ class DetailCard extends StatelessWidget {
   final String name, uri;
   final int stars;
 
-  const DetailCard({Key key, this.name, this.uri, this.stars})
-      : super(key: key);
+  DetailCard({Key key, this.name, this.uri, this.stars}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -94,7 +93,11 @@ class DetailCard extends StatelessWidget {
                               alignment: Alignment.bottomLeft,
                               height: 22.5,
                               child: Text(
-                                'Amateur',
+                                stars >= 1 && stars < 3
+                                    ? 'Amateur'
+                                    : stars >= 3 && stars < 5
+                                        ? 'Rookie'
+                                        : 'Pro',
                                 style: GoogleFonts.poppins(
                                     color: Colors.white.withOpacity(0.8),
                                     fontSize: 13),

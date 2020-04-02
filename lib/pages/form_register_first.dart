@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:rumblr/pages/home.dart';
@@ -16,6 +18,8 @@ class FormRegisterFirst extends StatefulWidget {
 class _FormRegisterFirstState extends State<FormRegisterFirst> {
   final _formKey = GlobalKey<FormState>();
   File _imagePath;
+  bool _loading = false;
+  TextEditingController _controller = TextEditingController();
 
   void _nextHandler(context) async {
     // validate photo
@@ -31,180 +35,223 @@ class _FormRegisterFirstState extends State<FormRegisterFirst> {
     }
 
     if (_formKey.currentState.validate() && _imagePath != null) {
+      setState(() {
+        _loading = true;
+      });
       // validate success
       SharedPreferences prefs = await SharedPreferences.getInstance();
       var uid = prefs.getString('uid');
+
       StorageReference ref =
           FirebaseStorage.instance.ref().child('images').child(uid + '.jpg');
       StorageUploadTask uploadTask = ref.putFile(_imagePath);
 
-      // String url = await (await uploadTask.onComplete).ref.getDownloadURL();
+      String url = await (await uploadTask.onComplete).ref.getDownloadURL();
+      var tmp = await Geolocator()
+          .getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      Firestore.instance.collection('users').document(uid).updateData({
+        'pass': true,
+        'totalFights': 0,
+        'photo': url,
+        'username': _controller.text.trim().toString(),
+        'geo' : GeoPoint(tmp.latitude, tmp.longitude),
+        'created_at': DateTime.now()
+      });
 
-      Navigator.push(context, MaterialPageRoute(builder: (context) => Home()));
+      // Save to Local
+      prefs.setString('photo', url);
+      prefs.setString('username', _controller.text.trim().toString());
+      prefs.setInt('totalFights', 0);
+      prefs.setDouble('lat', tmp.latitude);
+      prefs.setDouble('lon', tmp.longitude);
+
+      setState(() {
+        _loading = true;
+      });
+
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (context) => Home()));
     }
   }
 
   Future _getImage() async {
     File image = await ImagePicker.pickImage(
       source: ImageSource.gallery,
-      maxHeight: MediaQuery.of(context).size.width * .6,
-      maxWidth: MediaQuery.of(context).size.width * .6,
+      maxHeight: MediaQuery.of(context).size.width ,
+      maxWidth: MediaQuery.of(context).size.width ,
     );
 
     setState(() {
       _imagePath = image == null ? _imagePath : image;
     });
-
   }
-
-  
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomPadding: false,
       body: SafeArea(
-        child: Container(
-          width: MediaQuery.of(context).size.width,
-          height: MediaQuery.of(context).size.height,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF3F0A0A), Color(0xFF7C0000)],
+          child: Stack(
+        children: <Widget>[
+          Container(
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF3F0A0A), Color(0xFF7C0000)],
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                GestureDetector(
+                  onTap: _getImage,
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * .6,
+                    height: MediaQuery.of(context).size.width * .6,
+                    margin: EdgeInsets.only(bottom: 40),
+                    // color: Colors.white,
+                    child: Stack(
+                      children: <Widget>[
+                        Container(
+                          width: double.infinity,
+                          height: double.infinity,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.white, width: 3),
+                            borderRadius: BorderRadius.circular(
+                                MediaQuery.of(context).size.width * .6),
+                            // color: Colors.pink,
+                          ),
+                          child: _imagePath == null
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(
+                                      MediaQuery.of(context).size.width * .6),
+                                  child: Image.asset(
+                                    'assets/img/default_profile.png',
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : ClipRRect(
+                                  borderRadius: BorderRadius.circular(
+                                      MediaQuery.of(context).size.width * .6),
+                                  child: Image.file(
+                                    _imagePath,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                        ),
+                        Positioned(
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              borderRadius:
+                                  BorderRadiusDirectional.circular(40),
+                              color: Colors.red.withOpacity(0.8),
+                            ),
+                            child: Icon(
+                              Icons.add,
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                          ),
+                          right: 14,
+                          bottom: 14,
+                        )
+                      ],
+                    ),
+                  ),
+                ),
+                Container(
+                  width: MediaQuery.of(context).size.width * 0.7,
+                  padding: EdgeInsets.only(
+                    left: 10,
+                    right: 10,
+                    top: 3,
+                    bottom: 3,
+                  ),
+                  margin: EdgeInsets.only(bottom: 40),
+                  decoration: BoxDecoration(
+                      // color: Colors.white,
+                      borderRadius: BorderRadius.circular(
+                          MediaQuery.of(context).size.width * 0.7)),
+                  child: Form(
+                    key: _formKey,
+                    child: TextFormField(
+                      controller: _controller,
+                      validator: (value) {
+                        if (value.isEmpty)
+                          return 'Please enter your username';
+                        else if (value.length <= 5)
+                          return 'Your username is too short';
+
+                        return null;
+                      },
+                      cursorColor: Colors.white.withOpacity(0.8),
+                      style: TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                          // labelText: 'Username',
+                          hintText: 'Username',
+                          hintStyle: TextStyle(
+                            color: Colors.white.withOpacity(0.7),
+                          ),
+                          border: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                                color: Colors.white.withOpacity(0.8), width: 2),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                                color: Colors.white.withOpacity(0.8), width: 2),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                                color: Colors.white.withOpacity(0.8), width: 2),
+                          ),
+                          contentPadding: EdgeInsets.only(left: 5, right: 5)),
+                    ),
+                  ),
+                ),
+                TouchableOpacity(
+                  activeOpacity: 0.7,
+                  onTap: () {
+                    _nextHandler(context);
+                  },
+                  child: Container(
+                    width: 100,
+                    height: 50,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                        border: Border.all(color: Colors.white, width: 2),
+                        borderRadius: BorderRadius.circular(7)),
+                    child: Text(
+                      'NEXT',
+                      style: GoogleFonts.roboto(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          fontStyle: FontStyle.italic),
+                    ),
+                  ),
+                )
+              ],
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              GestureDetector(
-                onTap: _getImage,
-                child: Container(
-                  width: MediaQuery.of(context).size.width * .6,
-                  height: MediaQuery.of(context).size.width * .6,
-                  margin: EdgeInsets.only(bottom: 40),
-                  // color: Colors.white,
-                  child: Stack(
-                    children: <Widget>[
-                      Container(
-                        width: double.infinity,
-                        height: double.infinity,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white, width: 3),
-                          borderRadius: BorderRadius.circular(
-                              MediaQuery.of(context).size.width * .6),
-                          // color: Colors.pink,
-                        ),
-                        child: _imagePath == null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(
-                                    MediaQuery.of(context).size.width * .6),
-                                child: Image.asset(
-                                  'assets/img/default_profile.png',
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                            : ClipRRect(
-                                borderRadius: BorderRadius.circular(
-                                    MediaQuery.of(context).size.width * .6),
-                                child: Image.file(
-                                  _imagePath,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
+          _loading == true
+              ? Positioned(
+                  child: Container(
+                    color: Colors.black.withOpacity(0.4),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white.withOpacity(0.3)),
                       ),
-                      Positioned(
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadiusDirectional.circular(40),
-                            color: Colors.red.withOpacity(0.8),
-                          ),
-                          child: Icon(
-                            Icons.add,
-                            color: Colors.white.withOpacity(0.8),
-                          ),
-                        ),
-                        right: 14,
-                        bottom: 14,
-                      )
-                    ],
+                    ),
                   ),
-                ),
-              ),
-              Container(
-                width: MediaQuery.of(context).size.width * 0.7,
-                padding: EdgeInsets.only(
-                  left: 10,
-                  right: 10,
-                  top: 3,
-                  bottom: 3,
-                ),
-                margin: EdgeInsets.only(bottom: 40),
-                decoration: BoxDecoration(
-                    // color: Colors.white,
-                    borderRadius: BorderRadius.circular(
-                        MediaQuery.of(context).size.width * 0.7)),
-                child: Form(
-                  key: _formKey,
-                  child: TextFormField(
-                    validator: (value) {
-                      if (value.isEmpty)
-                        return 'Please enter your username';
-                      else if (value.length <= 5)
-                        return 'Your username is too short';
-
-                      return null;
-                    },
-                    cursorColor: Colors.white.withOpacity(0.8),
-                    style: TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                        // labelText: 'Username',
-                        hintText: 'Username',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                        ),
-                        border: UnderlineInputBorder(
-                          borderSide: BorderSide(
-                              color: Colors.white.withOpacity(0.8), width: 2),
-                        ),
-                        enabledBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(
-                              color: Colors.white.withOpacity(0.8), width: 2),
-                        ),
-                        focusedBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(
-                              color: Colors.white.withOpacity(0.8), width: 2),
-                        ),
-                        contentPadding: EdgeInsets.only(left: 5, right: 5)),
-                  ),
-                ),
-              ),
-              TouchableOpacity(
-                activeOpacity: 0.7,
-                onTap:() { _nextHandler(context); },
-                child: Container(
-                  width: 100,
-                  height: 50,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white, width: 2),
-                      borderRadius: BorderRadius.circular(7)),
-                  child: Text(
-                    'NEXT',
-                    style: GoogleFonts.roboto(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        fontStyle: FontStyle.italic),
-                  ),
-                ),
-              )
-            ],
-          ),
-        ),
-      ),
+                )
+              : Container()
+        ],
+      )),
     );
   }
 }
