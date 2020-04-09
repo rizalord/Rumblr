@@ -4,7 +4,8 @@ import 'package:touchable_opacity/touchable_opacity.dart';
 
 class ChatRoomHeader extends StatelessWidget {
   final Function callBack;
-  ChatRoomHeader({this.callBack});
+  final String username, photo;
+  ChatRoomHeader({this.callBack, this.photo, this.username});
 
   @override
   Widget build(BuildContext context) {
@@ -57,12 +58,13 @@ class ChatRoomHeader extends StatelessWidget {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(35),
                         child: Image.network(
-                          'https://pbs.twimg.com/profile_images/1057448315573362688/KHCCg0_K_400x400.jpg',
+                          photo,
+                          fit: BoxFit.cover,
                         ),
                       ),
                     ),
                     Text(
-                      'mattyice67',
+                      username,
                       style: GoogleFonts.roboto(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,

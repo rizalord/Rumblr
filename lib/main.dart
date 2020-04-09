@@ -13,7 +13,7 @@ void main() {
 class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContexcontext) {
     return MaterialApp(
       home: Authentication(),
       theme: ThemeData(scaffoldBackgroundColor: Color(0xFF420A0A)),

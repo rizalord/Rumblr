@@ -1,6 +1,11 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:rumblr/pages/chat_room.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import './../components/map_right_header.dart';
 
 class ChatList extends StatefulWidget {
@@ -9,7 +14,136 @@ class ChatList extends StatefulWidget {
 }
 
 class ChatListState extends State<ChatList> {
-  final List _data = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  List _data = [];
+  StreamSubscription<QuerySnapshot> subOne;
+  StreamSubscription<QuerySnapshot> subTwo;
+
+  @override
+  void initState() {
+    Future.delayed(Duration(milliseconds: 0), () {
+      _getChatContact();
+    });
+    super.initState();
+  }
+
+  void _getChatContact() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    var myId = prefs.getString('uid');
+
+    subOne = Firestore.instance
+        .collection('messages')
+        .where('id1', isEqualTo: myId)
+        .snapshots()
+        .listen((event) {
+      if (event.documents.length > 0) {
+        // found
+        event.documents.forEach((element) {
+          var docId = element['id2'].toString().substring(0, 5) +
+              element['id1'].toString().substring(0, 5);
+          StreamSubscription<QuerySnapshot> subs1 = Firestore.instance
+              .collection('messages')
+              .document(docId)
+              .collection(docId)
+              .orderBy('time', descending: true)
+              .limit(1)
+              .snapshots()
+              .listen((eventTwo) {
+            if (this.mounted) {
+              setState(() {
+                if (_data.indexOf({
+                      'id': element['id1'],
+                      'photo': element['photo1'],
+                      'username': element['username1'],
+                      'message': eventTwo.documents[0].data['message'],
+                      'chatId': docId,
+                      'time' : eventTwo.documents[0].data['time']
+                    }) ==
+                    -1) {
+                  _data.add({
+                    'id': element['id2'],
+                    'photo': element['photo2'],
+                    'username': element['username2'],
+                    'message': eventTwo.documents[0].data['message'],
+                    'chatId': docId,
+                    'time' : eventTwo.documents[0].data['time']
+                  });
+                }
+              });
+            }
+          });
+
+          Future.delayed(Duration(seconds: 1), () {
+            subs1.cancel();
+          });
+        });
+      }
+    });
+
+    Future.delayed(Duration(seconds: 1), () {
+      subOne.cancel();
+    });
+
+    // Second Part
+    subTwo = Firestore.instance
+        .collection('messages')
+        .where('id2', isEqualTo: myId)
+        .snapshots()
+        .listen((event) {
+      if (event.documents.length > 0) {
+        // found
+        event.documents.forEach((element) {
+          var docId = element['id2'].toString().substring(0, 5) +
+              element['id1'].toString().substring(0, 5);
+          StreamSubscription<QuerySnapshot> subs2 = Firestore.instance
+              .collection('messages')
+              .document(docId)
+              .collection(docId)
+              .orderBy('time', descending: true)
+              .limit(1)
+              .snapshots()
+              .listen((eventTwo) {
+            if (this.mounted) {
+              setState(() {
+                if (_data.indexOf({
+                      'id': element['id1'],
+                      'photo': element['photo1'],
+                      'username': element['username1'],
+                      'message': eventTwo.documents[0].data['message'],
+                      'chatId': docId
+                    }) ==
+                    -1) {
+                  _data.add({
+                    'id': element['id1'],
+                    'photo': element['photo1'],
+                    'username': element['username1'],
+                    'message': eventTwo.documents[0].data['message'],
+                    'chatId': docId
+                  });
+                }
+              });
+            }
+          });
+
+          Future.delayed(Duration(seconds: 1), () {
+            subs2.cancel();
+          });
+        });
+      }
+    });
+
+    Future.delayed(Duration(seconds: 1), () {
+      subTwo.cancel();
+    });
+  }
+
+  void dismissChat(id){
+    Firestore.instance.collection('messages').document(id).delete().whenComplete(() {
+      setState(() {
+        _data = _data.where((element) => element['chatId'] != id).toList();
+      });
+    });
+    
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +171,15 @@ class ChatListState extends State<ChatList> {
                   child: _data.length > 0
                       ? ListView.builder(
                           itemCount: _data.length,
-                          itemBuilder: (context, index) => ChatCard(),
+                          itemBuilder: (context, index) => ChatCard(
+                            photo: _data[index]['photo'],
+                            username: _data[index]['username'],
+                            id: _data[index]['chatId'],
+                            opponentId: _data[index]['id'],
+                            message: _data[index]['message'],
+                            time : _data[index]['time'],
+                            callback: this.dismissChat,
+                          ),
                         )
                       : Center(
                           child: Text(
@@ -59,13 +201,26 @@ class ChatListState extends State<ChatList> {
 }
 
 class ChatCard extends StatelessWidget {
-  const ChatCard({
-    Key key,
-  }) : super(key: key);
+  final String photo, username, id, message, opponentId;
+  final int time;
+  final Function callback;
+  const ChatCard(
+      {Key key,
+      this.photo,
+      this.username,
+      this.id,
+      this.message,
+      this.opponentId,
+      this.time,
+      this.callback})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Dismissible(
+      onDismissed: (DismissDirection direction){
+        callback(id);
+      },
       background: Container(
         color: Colors.red.withOpacity(0.4),
         child: Center(
@@ -76,7 +231,7 @@ class ChatCard extends StatelessWidget {
           ),
         ),
       ),
-      key: Key('key'),
+      key: Key(id),
       child: Container(
         decoration: BoxDecoration(
           color: Color(0xFF68453F).withOpacity(0.7),
@@ -91,11 +246,17 @@ class ChatCard extends StatelessWidget {
               EdgeInsets.only(top: 7, bottom: 7, left: 15, right: 15),
           onTap: () {
             Navigator.push(
-                context, MaterialPageRoute(builder: (context) => ChatRoom()));
+                context,
+                MaterialPageRoute(
+                    builder: (context) => ChatRoom(
+                        id: id,
+                        username: username,
+                        photo: photo,
+                        opponentId: opponentId)));
           },
           onLongPress: () {},
           title: Text(
-            'Eric Seidel',
+            username,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -104,7 +265,7 @@ class ChatCard extends StatelessWidget {
             ),
           ),
           subtitle: Text(
-            'Yo, I\'m waiting you in park this night.',
+            message != null ? message : '',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -115,10 +276,14 @@ class ChatCard extends StatelessWidget {
             borderRadius:
                 BorderRadius.circular(MediaQuery.of(context).size.width),
             child: Image.network(
-                'https://pbs.twimg.com/profile_images/947228834121658368/z3AHPKHY_400x400.jpg'),
+              photo,
+              width: MediaQuery.of(context).size.width * 0.14,
+              height: MediaQuery.of(context).size.width * 0.14,
+              fit: BoxFit.cover,
+            ),
           ),
           trailing: Text(
-            '08.04',
+            DateFormat('hh:mm').format(DateTime.fromMillisecondsSinceEpoch(time)) ,
             style: TextStyle(
               fontSize: 13,
               color: Colors.white.withOpacity(0.68),

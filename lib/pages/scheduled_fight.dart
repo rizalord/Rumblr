@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_datetime_picker/flutter_datetime_picker.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,6 +10,10 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:touchable_opacity/touchable_opacity.dart';
 
 class ScheduledFight extends StatefulWidget {
+  final String id;
+
+  ScheduledFight({this.id});
+
   @override
   _ScheduledFightState createState() => _ScheduledFightState();
 }
@@ -21,19 +26,30 @@ class _ScheduledFightState extends State<ScheduledFight> {
 
   @override
   void initState() {
+    print(widget.id);
     Future.delayed(Duration(milliseconds: 0), () async {
-      var tmpPos = await Geolocator()
-          .getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      setState(() {
-        _myPosition = CameraPosition(
-            target: LatLng(tmpPos.latitude, tmpPos.longitude), zoom: 17.856);
-        loading = false;
-        _markers.add(
-          Marker(
-              markerId: MarkerId('1'),
-              position: LatLng(tmpPos.latitude, tmpPos.longitude),
-              icon: BitmapDescriptor.defaultMarker),
-        );
+      // var tmpPos = await Geolocator()
+      //     .getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      Firestore.instance
+          .collection('schedule')
+          .document(widget.id)
+          .snapshots()
+          .listen((event) {
+        GeoPoint loc = event.data['location'];
+        DateTime date = DateTime.fromMillisecondsSinceEpoch(event.data['time']);
+        print(date.hour);
+
+        setState(() {
+          _myPosition = CameraPosition(
+              target: LatLng(loc.latitude, loc.longitude), zoom: 17.856);
+          loading = false;
+          _markers.add(
+            Marker(
+                markerId: MarkerId('1'),
+                position: LatLng(loc.latitude, loc.longitude),
+                icon: BitmapDescriptor.defaultMarker),
+          );
+        });
       });
     });
     super.initState();
@@ -148,12 +164,18 @@ class Header extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          Container(
-            width: 60,
-            child: Icon(
-              Icons.chevron_left,
-              size: 40,
-              color: Colors.white.withOpacity(0.7),
+          TouchableOpacity(
+            activeOpacity: 0.7,
+            onTap: (){
+              Navigator.pop(context);
+            },
+            child: Container(
+              width: 60,
+              child: Icon(
+                Icons.chevron_left,
+                size: 40,
+                color: Colors.white.withOpacity(0.7),
+              ),
             ),
           ),
           Text(

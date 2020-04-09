@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:ui';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -8,6 +9,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:icon_shadow/icon_shadow.dart';
 import 'package:rumblr/components/cards/detail_card.dart';
 import 'package:rumblr/components/home_header.dart';
+import 'package:rumblr/pages/chat_room.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:touchable_opacity/touchable_opacity.dart';
 
 class HomeMain extends StatefulWidget {
@@ -22,10 +25,13 @@ class HomeMainState extends State<HomeMain> {
   var _listData = [];
   bool showFight = false;
   double showFightOpacity = 0.0;
+  String _enemyUsername, _enemyImage, _myImage, peerId;
 
   @override
   void initState() {
-    _getOpponents();
+    Future.delayed(Duration(milliseconds: 0), () {
+      _getOpponents();
+    });
     super.initState();
   }
 
@@ -36,7 +42,7 @@ class HomeMainState extends State<HomeMain> {
     _getNearestLocation(myPos.latitude, myPos.longitude, 1);
   }
 
-  void _getNearestLocation(latitude, longitude, distance) {
+  void _getNearestLocation(latitude, longitude, distance) async {
     // ~1 mile of lat and lon in degrees
     var lat = 0.0144927536231884;
     var lon = 0.0181818181818182;
@@ -50,29 +56,192 @@ class HomeMainState extends State<HomeMain> {
     var lesserGeopoint = GeoPoint(lowerLat, lowerLon);
     var greaterGeopoint = GeoPoint(greaterLat, greaterLon);
 
-    setState(() {
-      Firestore.instance
-          .collection("users")
-          .where('geo',
-              isGreaterThanOrEqualTo: lesserGeopoint,
-              isLessThanOrEqualTo: greaterGeopoint)
-          .limit(3)
-          .snapshots()
-          .listen((QuerySnapshot event) {
-        event.documents.forEach((DocumentSnapshot element) {
-          _listData.add(element);
+    SharedPreferences pref = await SharedPreferences.getInstance();
+    var uid = pref.getString('uid');
+
+    Firestore.instance
+        .collection("users")
+        .where('geo',
+            isGreaterThanOrEqualTo: lesserGeopoint,
+            isLessThanOrEqualTo: greaterGeopoint)
+        .limit(4)
+        .snapshots()
+        .listen((QuerySnapshot event) {
+      List<DocumentSnapshot> tmp = [];
+      event.documents.forEach((element) {
+        if (element['uid'] != uid) {
+          setState(() {
+            tmp.add(element);
+          });
+        }
+      });
+
+      if (tmp.length <= 3) {
+        tmp.forEach((DocumentSnapshot element) {
+          setState(() {
+            _listData.add(element);
+          });
         });
+      } else {
+        for (var i = 0; i < 3; i++) {
+          if (tmp[i]['uid'] != uid) {
+            setState(() {
+              _listData.add(event.documents[i]);
+            });
+          }
+        }
+      }
+
+      // no opponent
+      if (event.documents.length == 0) {
+        _getAnyOpponent();
+      }
+    });
+  }
+
+  _getAnyOpponent() async {
+    SharedPreferences pref = await SharedPreferences.getInstance();
+    var uid = pref.getString('uid');
+
+    Firestore.instance.collection('users').limit(3).snapshots().listen((event) {
+      setState(() {
+        if (event.documents.length <= 3) {
+          event.documents
+              .where((item) => item['uid'] != uid)
+              .forEach((DocumentSnapshot element) {
+            _listData.add(element);
+          });
+        } else {
+          for (var i = 0; i < 3; i++) {
+            if (event.documents[i]['uid'] != uid) {
+              _listData.add(event.documents[i]);
+            }
+          }
+        }
       });
     });
   }
 
   void _passOpponent() async {
+    SharedPreferences pref = await SharedPreferences.getInstance();
+    var uid = pref.getString('uid');
 
     setState(() {
-      var tmp = _listData.first;
-      _listData.removeAt(0);
-      _listData.add(tmp);
+      if (_listData.length != 0) {
+        Firestore.instance
+            .collection('users')
+            .orderBy('uid')
+            .startAfter([_listData.last['uid']])
+            .limit(2)
+            .snapshots()
+            .listen((QuerySnapshot snapshot) async {
+              // print(snapshot.documents.length);
+              List<DocumentSnapshot> listing = [];
+              snapshot.documents.forEach((element) {
+                if (element['uid'] != uid) {
+                  listing.add(element);
+                }
+              });
+
+              _listData.removeAt(0);
+
+              try {
+                listing.elementAt(0) != null
+                    ? _listData.add(listing.elementAt(0))
+                    : null;
+              } catch (e) {
+                //
+              }
+
+              // no opponent
+              if (snapshot.documents.length == 0) {
+                // var myPos = await Geolocator()
+                //     .getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+                // _getNearestLocation(myPos.latitude, myPos.longitude, 1);
+              }
+            });
+      }
     });
+  }
+
+  void _setFight() async {
+    if (_listData.length != 0) {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      var uid = prefs.getString('uid');
+      var photo = prefs.getString('photo');
+
+      _setFirebaseChat();
+
+      setState(() {
+        showFight = true;
+        _enemyImage = _listData.first['photo'];
+        _myImage = photo;
+        _enemyUsername = _listData.first['username'];
+        Future.delayed(Duration(milliseconds: 500), () {
+          setState(() {
+            showFightOpacity = 1.0;
+          });
+        });
+      });
+    }
+  }
+
+  void getChat() {
+    var id = this.peerId;
+    var username = _listData.first['username'];
+    var photo = _listData.first['photo'];
+    var opponentId = _listData.first['uid'];
+
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (context) => ChatRoom(
+                  id: id,
+                  opponentId: opponentId,
+                  photo: photo,
+                  username: username,
+                )));
+    setState(() {
+      showFightOpacity = 0.0;
+      Future.delayed(Duration(seconds: 1), () {
+        setState(() {
+          showFight = false;
+        });
+      });
+    });
+  }
+
+  void _setFirebaseChat() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+
+    String enemyId = _listData.first['uid'];
+    String myId = prefs.getString('uid');
+    String myPhoto = prefs.getString('photo');
+    String myUsername = prefs.getString('username');
+
+    var peerId = enemyId.substring(0, 5) + myId.substring(0, 5);
+    this.peerId = peerId;
+    var nowTime = DateTime.now().millisecondsSinceEpoch;
+
+    Firestore.instance
+        .collection('messages')
+        .document(peerId)
+        .collection(peerId)
+        .document(nowTime.toString())
+        .setData({'time': nowTime, 'message': null, 'senderId': myId});
+
+    Firestore.instance.collection('messages').document(peerId).setData(
+      {
+        'id1': myId,
+        'id2': enemyId,
+        'photo1': myPhoto,
+        'photo2': _listData.first['photo'],
+        'username1': myUsername,
+        'username2': _listData.first['username'],
+        'scheduled': false,
+        'scheduledId': null
+      },
+    );
   }
 
   @override
@@ -95,42 +264,54 @@ class HomeMainState extends State<HomeMain> {
             children: <Widget>[
               HomeHeader(setView: widget.setView),
               Flexible(
-                child: Stack(
-                  children: _listData
-                      .map((item) => AnimatedPositioned(
-                            duration: Duration(milliseconds: 500),
-                            curve: Curves.easeIn,
-                            top: 8 * (_listData.indexOf(item) + 1).toDouble(),
-                            left: 8 * (_listData.indexOf(item) + 1).toDouble(),
-                            right: 8 * (_listData.indexOf(item) + 1).toDouble(),
-                            child: DetailCard(
-                                name: item['username'],
-                                stars: item['totalFights'] / 5 == 0
-                                    ? 1
-                                    : (item['totalFights'].toDouble() / 5)
-                                                .floor() >
-                                            5
-                                        ? 5
-                                        : (item['totalFights'].toDouble() / 5)
-                                            .floor(),
-                                uri: item['photo']),
-                          ))
-                      .toList()
-                      .reversed
-                      .toList(),
-                ),
+                child: _listData.length != 0
+                    ? Stack(
+                        children: _listData
+                            .map((item) => AnimatedPositioned(
+                                  duration: Duration(milliseconds: 500),
+                                  curve: Curves.easeIn,
+                                  top: 8 *
+                                      (_listData.indexOf(item) + 1).toDouble(),
+                                  left: 8 *
+                                      (_listData.indexOf(item) + 1).toDouble(),
+                                  right: 8 *
+                                      (_listData.indexOf(item) + 1).toDouble(),
+                                  child: DetailCard(
+                                      name: item['username'],
+                                      stars: item['totalFights'] / 5 == 0
+                                          ? 1
+                                          : (item['totalFights'].toDouble() / 5)
+                                                      .floor() >
+                                                  5
+                                              ? 5
+                                              : (item['totalFights']
+                                                          .toDouble() /
+                                                      5)
+                                                  .floor(),
+                                      uri: item['photo']),
+                                ))
+                            .toList()
+                            .reversed
+                            .toList(),
+                      )
+                    : Container(
+                        width: MediaQuery.of(context).size.width * 0.95,
+                        height: MediaQuery.of(context).size.width * 0.95,
+                        child: Center(
+                          child: Text(
+                            'No Opponent Yet',
+                            style: GoogleFonts.roboto(
+                                color: Colors.white,
+                                fontSize: 27,
+                                fontStyle: FontStyle.italic),
+                          ),
+                        ),
+                      ),
               ),
               TouchableOpacity(
                 activeOpacity: 0.7,
                 onTap: () {
-                  setState(() {
-                    showFight = true;
-                    Future.delayed(Duration(milliseconds: 500), () {
-                      setState(() {
-                        showFightOpacity = 1.0;
-                      });
-                    });
-                  });
+                  _setFight();
                 },
                 child: Container(
                   width: 120,
@@ -207,9 +388,10 @@ class HomeMainState extends State<HomeMain> {
                               color: Colors.white,
                             ),
                           ),
-                          PhotoVersusCard(),
-                          TextForBattle(),
-                          BtnChat(),
+                          PhotoVersusCard(
+                              enemyImage: _enemyImage, myImage: _myImage),
+                          TextForBattle(enemyUsername: this._enemyUsername),
+                          BtnChat(callback: this.getChat),
                           TouchableOpacity(
                             activeOpacity: 0.8,
                             onTap: () {
@@ -247,15 +429,17 @@ class HomeMainState extends State<HomeMain> {
 }
 
 class BtnChat extends StatelessWidget {
-  const BtnChat({
-    Key key,
-  }) : super(key: key);
+  final Function callback;
+
+  const BtnChat({Key key, this.callback}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return TouchableOpacity(
       activeOpacity: 0.7,
-      onTap: () {},
+      onTap: () {
+        callback();
+      },
       child: Container(
         width: 120,
         height: 62,
@@ -278,9 +462,9 @@ class BtnChat extends StatelessWidget {
 }
 
 class TextForBattle extends StatelessWidget {
-  const TextForBattle({
-    Key key,
-  }) : super(key: key);
+  final String enemyUsername;
+
+  const TextForBattle({Key key, this.enemyUsername}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -292,7 +476,7 @@ class TextForBattle extends StatelessWidget {
         margin: EdgeInsets.only(bottom: 30),
         // color: Colors.white,
         child: Text(
-          'You and mattyice67 both want to throw down. Start chatting to arrange a time and location, then broadcast the final fight details to draw a crowd.',
+          'You and ${enemyUsername} both want to throw down. Start chatting to arrange a time and location, then broadcast the final fight details to draw a crowd.',
           style: GoogleFonts.roboto(
               color: Colors.white,
               fontStyle: FontStyle.italic,
@@ -307,9 +491,9 @@ class TextForBattle extends StatelessWidget {
 }
 
 class PhotoVersusCard extends StatelessWidget {
-  const PhotoVersusCard({
-    Key key,
-  }) : super(key: key);
+  final String myImage, enemyImage;
+  const PhotoVersusCard({Key key, this.myImage, this.enemyImage})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -341,10 +525,8 @@ class PhotoVersusCard extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(
                       MediaQuery.of(context).size.width * 0.8),
-                  child: Image.network(
-                    'https://pbs.twimg.com/profile_images/1138535538208718849/hViVs-Vi_400x400.jpg',
-                    fit: BoxFit.cover,
-                  ),
+                  child:
+                      CachedNetworkImage(imageUrl: myImage, fit: BoxFit.cover),
                 ),
               ),
               Container(
@@ -362,10 +544,8 @@ class PhotoVersusCard extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(
                       MediaQuery.of(context).size.width * 0.8),
-                  child: Image.network(
-                    'https://i1.sndcdn.com/avatars-000604045011-842orv-t200x200.jpg',
-                    fit: BoxFit.cover,
-                  ),
+                  child: CachedNetworkImage(
+                      imageUrl: enemyImage, fit: BoxFit.cover),
                 ),
               ),
             ],

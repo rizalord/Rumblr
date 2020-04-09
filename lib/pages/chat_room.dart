@@ -1,17 +1,29 @@
 import 'dart:ui';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:rumblr/components/chat_room_header.dart';
+import 'package:rumblr/pages/home.dart';
+import 'package:rumblr/pages/schedule_fight.dart';
 import 'package:rumblr/pages/scheduled_fight.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:touchable_opacity/touchable_opacity.dart';
 
 class ChatRoom extends StatefulWidget {
+  final String id, username, photo, opponentId;
+
+  ChatRoom({this.id, this.username, this.photo, this.opponentId});
+
   @override
   _ChatRoomState createState() => _ChatRoomState();
 }
 
 class _ChatRoomState extends State<ChatRoom> {
+  String id, username, photo, myId, opponentId;
+  int totalFight;
+  ScrollController _scrollController = ScrollController();
+
   List _listchat = [
     {
       "userId": 1,
@@ -35,15 +47,64 @@ class _ChatRoomState extends State<ChatRoom> {
     },
   ];
   bool showStatus = false;
-  final _formKey = GlobalKey<FormState>();
-  final _textController = TextEditingController();
+  var _formKey = GlobalKey<FormState>();
+  var _textController = TextEditingController();
+
+  @override
+  void initState() {
+    this.id = widget.id;
+    this.username = widget.username;
+    this.photo = widget.photo;
+    this.opponentId = widget.opponentId;
+
+    Future.delayed(
+        Duration(milliseconds: 0), () => this.getData(id, username, photo));
+    super.initState();
+  }
+
+  void getData(id, username, photo) async {
+    Map myData = await this._myData(); // {username:, uid: , photo:}
+
+    Firestore.instance
+        .collection('users')
+        .document(opponentId)
+        .snapshots()
+        .listen((event) {
+      setState(() {
+        myId = myData['uid'];
+        totalFight = event.data['totalFights'];
+      });
+    });
+  }
+
+  _myData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+
+    return {
+      'username': prefs.getString('username'),
+      'uid': prefs.getString('uid'),
+      'photo': prefs.getString('photo'),
+    };
+  }
 
   void onSubmit(context) {
-    if (_textController.text.length > 0) {
-      setState(() {
-        _listchat.add({"userId": 1, 'message': _textController.text});
+    if (_textController.text.trim().length > 0) {
+      var time = DateTime.now().millisecondsSinceEpoch;
+      print(time);
+      Firestore.instance
+          .collection('messages')
+          .document(id)
+          .collection(id)
+          .document(time.toString())
+          .setData({
+        'message': _textController.text.trim().toString(),
+        'senderId': myId,
+        'time': time
+      }).whenComplete(() {
         FocusScope.of(context).unfocus();
         _textController.text = '';
+        _scrollController.animateTo(MediaQuery.of(context).size.height,
+            duration: Duration(milliseconds: 500), curve: Curves.ease);
       });
     }
   }
@@ -68,42 +129,94 @@ class _ChatRoomState extends State<ChatRoom> {
         body: SafeArea(
           child: Column(
             children: <Widget>[
-              ChatRoomHeader(callBack: () {
-                setState(() {
-                  showStatus = !showStatus;
-                });
-              }),
+              ChatRoomHeader(
+                callBack: () {
+                  setState(() {
+                    showStatus = !showStatus;
+                  });
+                },
+                photo: photo,
+                username: username,
+              ),
               Expanded(
                 child: Stack(
                   children: <Widget>[
                     Container(
                       child: Column(
                         children: <Widget>[
-                          TwoButtons(),
+                          TwoButtons(
+                            id: id,
+                            opponentId: opponentId,
+                            photo: photo,
+                            username: username,
+                          ),
                           Expanded(
                             child: SingleChildScrollView(
+                              controller: _scrollController,
                               child: Column(
                                 children: <Widget>[
                                   TextTips(),
-                                  ListView.builder(
-                                    shrinkWrap: true,
-                                    physics: NeverScrollableScrollPhysics(),
-                                    itemCount: _listchat.length,
-                                    itemBuilder: (context, index) {
-                                      return _listchat[index]['userId'] == 1
-                                          ? SelfMessage(
-                                              text: _listchat[index]['message'])
-                                          : OpponentMessage(
-                                              index: _listchat[index]
-                                                          ['userId'] ==
-                                                      _listchat[index - 1]
-                                                          ['userId']
-                                                  ? 1
-                                                  : 0,
-                                              text: _listchat[index]['message'],
-                                            );
+                                  StreamBuilder(
+                                    stream: Firestore.instance
+                                        .collection('messages')
+                                        .document(id)
+                                        .collection(id)
+                                        .snapshots(),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.hasData) {
+                                        List<DocumentSnapshot> data =
+                                            snapshot.data.documents;
+                                        data = data
+                                            .where((element) =>
+                                                element.data['message'] != null)
+                                            .toList();
+                                        List anotherData = data.map((e) {
+                                          if (e.data['senderId'] !=
+                                              opponentId) {
+                                            return SelfMessage(
+                                                text: e.data['message']);
+                                          } else {
+                                            var index = data.indexOf(e);
+                                            var newIndex = index == 0
+                                                ? 0
+                                                : data[index]['senderId'] ==
+                                                        data[index - 1]
+                                                            ['senderId']
+                                                    ? 1
+                                                    : 0;
+                                            return OpponentMessage(
+                                                index: newIndex,
+                                                text: e.data['message']);
+                                          }
+                                        }).toList();
+
+                                        return Column(
+                                          children: anotherData,
+                                        );
+                                      } else {
+                                        return SelfMessage(text: 'nice');
+                                      }
                                     },
-                                  ),
+                                  )
+                                  // ListView.builder(
+                                  //   shrinkWrap: true,
+                                  //   physics: NeverScrollableScrollPhysics(),
+                                  //   itemCount: _listchat.length,
+                                  //   itemBuilder: (context, index) {
+                                  //     return _listchat[index]['userId'] == 1
+                                  //         ? SelfMessage(
+                                  //             text: _listchat[index]['message'])
+                                  //         : OpponentMessage(
+                                  //             index: _listchat[index]
+                                  //                         ['userId'] ==
+                                  //                     _listchat[index - 1]
+                                  //                         ['userId']
+                                  //                 ? 1
+                                  //                 : 0,
+                                  //             text: _listchat[index]['message'],
+                                  //           );
+                                  //   },
+                                  // ),
                                 ],
                               ),
                             ),
@@ -222,17 +335,17 @@ class _ChatRoomState extends State<ChatRoom> {
                                                     value: 'Amateur'),
                                                 StatsItem(
                                                     text: 'Total Fight: ',
-                                                    value: '3'),
+                                                    value:
+                                                        totalFight.toString()),
                                                 StatsItem(
                                                     text: 'Last fight: ',
-                                                    value: '2 weeks ago'),
+                                                    value: '-'),
                                                 StatsItem(
                                                     text: 'Height/Weight: ',
-                                                    value:
-                                                        '5\' 11" / 170   lbs'),
+                                                    value: '-/-'),
                                                 StatsItem(
                                                     text: 'MMA Speciality: ',
-                                                    value: 'Karate, Other'),
+                                                    value: '-'),
                                               ],
                                             ),
                                           ),
@@ -439,9 +552,33 @@ class TextTips extends StatelessWidget {
 }
 
 class TwoButtons extends StatelessWidget {
-  const TwoButtons({
-    Key key,
-  }) : super(key: key);
+  final String id, opponentId, username, photo;
+  const TwoButtons(
+      {Key key, this.id, this.opponentId, this.username, this.photo})
+      : super(key: key);
+
+  void out(context) {
+    Firestore.instance
+        .collection('messages')
+        .document(id)
+        .snapshots()
+        .listen((event) {
+      var sId = event.data['scheduledId'];
+      Firestore.instance
+          .collection('schedule')
+          .document(sId)
+          .delete()
+          .whenComplete(() {
+        Firestore.instance
+            .collection('messages')
+            .document(id)
+            .delete()
+            .whenComplete(() {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => Home()));
+        });
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -452,42 +589,44 @@ class TwoButtons extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
+          StreamBuilder(
+            stream: Firestore.instance
+                .collection('messages')
+                .document(id)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasData) {
+                Map data = snapshot.data.data;
+
+                if (data['scheduled'] == false) {
+                  return SchedulingBtn(data: {
+                    'opponentId': opponentId,
+                    'username': username,
+                    'photo': photo,
+                    'messageId': id
+                  });
+                } else {
+                  return ScheduledBtn(id: data['scheduledId']);
+                }
+              }
+              return Expanded(child: Container());
+            },
+          ),
           TouchableOpacity(
             activeOpacity: 0.7,
-            onTap: (){
-              Navigator.push(context, MaterialPageRoute(builder: (context) => ScheduledFight()));
+            onTap: () {
+              this.out(context);
             },
             child: Container(
               width: MediaQuery.of(context).size.width / 2.2,
               height: 40,
-              margin: EdgeInsets.only(right: 7.5),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                   border: Border.all(
                       color: Colors.white.withOpacity(0.9), width: 2),
                   borderRadius: BorderRadius.circular(5)),
               child: Text(
-                'SCHEDULE FIGHT',
-                style: GoogleFonts.roboto(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    fontStyle: FontStyle.italic),
-              ),
-            ),
-          ),
-          TouchableOpacity(
-            activeOpacity: 0.7,
-            child: Container(
-              width: MediaQuery.of(context).size.width / 2.2,
-              height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                  border: Border.all(
-                      color: Colors.white.withOpacity(0.9), width: 2),
-                  borderRadius: BorderRadius.circular(5)),
-              child: Text(
-                'PUSSY OUT',
+                'OUT',
                 style: GoogleFonts.roboto(
                     color: Colors.white.withOpacity(0.9),
                     fontSize: 17,
@@ -497,6 +636,73 @@ class TwoButtons extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class ScheduledBtn extends StatelessWidget {
+  final String id;
+
+  const ScheduledBtn({Key key, this.id}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return TouchableOpacity(
+      activeOpacity: 0.7,
+      onTap: () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (context) => ScheduledFight(id: id)));
+      },
+      child: Container(
+        width: MediaQuery.of(context).size.width / 2.2,
+        height: 40,
+        margin: EdgeInsets.only(right: 7.5),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+            border: Border.all(color: Colors.white.withOpacity(0.9), width: 2),
+            borderRadius: BorderRadius.circular(5)),
+        child: Text(
+          'SEE SCHEDULE',
+          style: GoogleFonts.roboto(
+              color: Colors.white.withOpacity(0.9),
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              fontStyle: FontStyle.italic),
+        ),
+      ),
+    );
+  }
+}
+
+class SchedulingBtn extends StatelessWidget {
+  final Map data;
+  SchedulingBtn({this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    return TouchableOpacity(
+      activeOpacity: 0.7,
+      onTap: () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (context) => ScheduleFight(data: data)));
+      },
+      child: Container(
+        width: MediaQuery.of(context).size.width / 2.2,
+        height: 40,
+        margin: EdgeInsets.only(right: 7.5),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+            border: Border.all(color: Colors.white.withOpacity(0.9), width: 2),
+            borderRadius: BorderRadius.circular(5)),
+        child: Text(
+          'SCHEDULE FIGHT',
+          style: GoogleFonts.roboto(
+              color: Colors.white.withOpacity(0.9),
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              fontStyle: FontStyle.italic),
+        ),
       ),
     );
   }
